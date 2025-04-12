@@ -1,12 +1,12 @@
 import cv2
 import numpy as np
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 import time
 
-# Load the TFLite model
-interpreter_options = tf.lite.Interpreter.Options()
-interpreter_options.num_threads = 4  # Adjust based on your Pi model (number of cores)
-interpreter = tf.lite.Interpreter(model_path="lite0-det-default.tflite", options=interpreter_options)
+# Load the TFLite model with threading options
+interpreter_options = tflite.Interpreter.Options()
+interpreter_options.num_threads = 4  # Adjust based on your Pi model
+interpreter = tflite.Interpreter(model_path="lite0-det-default.tflite", options=interpreter_options)
 
 # Allocate tensors
 interpreter.allocate_tensors()
@@ -55,6 +55,7 @@ while True:
     input_data = np.expand_dims(frame_resized, axis=0).astype(np.uint8)
 
     # Perform inference
+    start_time = time.time()
     interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
 
@@ -91,26 +92,7 @@ while True:
             if object_name in count_by_class:
                 count_by_class[object_name] += 1
 
-    # Show FPS
-    fps = 1 / (time.time() - start_time) if 'start_time' in locals() else 0
-    start_time = time.time()
-    cv2.putText(frame, f"FPS: {fps:.2f}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-    # Display counts
-    y_offset = 60
-    for cls, cnt in count_by_class.items():
-        cv2.putText(frame, f"{cls}: {cnt}", (10, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        y_offset += 25
-
-    # Display the frame
-    cv2.imshow('Vehicle Detection', frame)
-
-    # Press 'q' to quit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Clean up
-cap.release()
-cv2.destroyAllWindows()
+    # Measure inference time
+    inference_time = time.time() - start_time
+    cv2.putText(frame, f"Inference Time: {inference_time:.4f}s", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX
