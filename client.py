@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import time
+import requests
 
 # Load the TFLite model
 interpreter = tf.lite.Interpreter(model_path="lite0-det-default.tflite")
@@ -18,25 +19,32 @@ width = input_shape[2]
 with open('labels.txt') as file:
     labels = {i: a.strip() for i, a in enumerate(file.readlines())}
 
-# Set minimum confidence threshold for detections
+# Set minimum confidence threshold
 min_conf_threshold = 0.35
 
-# Initialize webcam
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Error: Could not open webcam.")
-    exit()
+# Raspberry Pi endpoints
+raspberry_pi_ip = "http://192.168.1.100:5000"  # Change to your Pi IP
+image_url = f"{raspberry_pi_ip}/image"
+led_url = f"{raspberry_pi_ip}/change_status"
 
 print("Press 'q' to quit")
 
 while True:
-    # Capture frame from webcamw
-    ret, frame = cap.read()
-    if not ret:
-        print("Error: Can't receive frame. Exiting...")
-        break
+    try:
+        response = requests.get(image_url, timeout=2)
+        if response.status_code != 200:
+            print("Failed to get image from Raspberry Pi.")
+            continue
+        image_bytes = np.asarray(bytearray(response.content), dtype=np.uint8)
+        frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
+    except Exception as e:
+        print("Error:", e)
+        continue
 
-    # Initialize count dictionary
+    if frame is None:
+        print("Error: Received empty frame.")
+        continue
+
     count_by_class = {
         'person': 0,
         'car': 0,
@@ -45,21 +53,17 @@ while True:
         'truck': 0
     }
 
-    # Resize and preprocess the frame for the model
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame_resized = cv2.resize(frame_rgb, (width, height))
     input_data = np.expand_dims(frame_resized, axis=0).astype(np.uint8)
 
-    # Perform inference
     interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
 
-    # Get detection results
     boxes = interpreter.get_tensor(output_details[0]['index'])[0]
     classes = interpreter.get_tensor(output_details[1]['index'])[0]
     scores = interpreter.get_tensor(output_details[2]['index'])[0]
 
-    # Process detections
     frame_height, frame_width, _ = frame.shape
     for i in range(len(scores)):
         if scores[i] > min_conf_threshold:
@@ -71,33 +75,32 @@ while True:
             ymax = int(min(frame_height, boxes[i][2] * frame_height))
             xmax = int(min(frame_width, boxes[i][3] * frame_width))
 
-            # Draw bounding box
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (10, 255, 0), 2)
-
-            # Display label and confidence
             label = f'{object_name}: {int(scores[i] * 100)}%'
-            label_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             label_ymin = max(ymin, label_size[1] + 10)
             cv2.rectangle(frame, (xmin, label_ymin - label_size[1] - 10),
                           (xmin + label_size[0], label_ymin), (255, 0, 0), cv2.FILLED)
             cv2.putText(frame, label, (xmin, label_ymin - 7),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
-            # Count target classes
             if object_name in count_by_class:
                 count_by_class[object_name] += 1
 
-    # Draw legend circles with conditional fill
-    colors = {
-        'car': (0, 0, 255),
-        'truck': (0, 255, 0),
-        'motorcycle': (255, 0, 0)
-    }
-    y_positions = {
-        'car': 30,
-        'truck': 60,
-        'motorcycle': 90
-    }
+    # Send LED update based on object counts
+    try:
+        led_status = {
+            "8": count_by_class['car'] > 0,                           # LED 1 ON if car detected
+            "10": count_by_class['truck'] > 0,                        # LED 2 ON if truck detected
+            "11": (count_by_class['person'] + count_by_class['motorcycle']) > 0  # LED 3 ON if person or motorcycle
+        }
+        requests.post(led_url, json=led_status, timeout=1)
+    except Exception as e:
+        print("Failed to update LED status:", e)
+
+    # Draw legend
+    colors = {'car': (0, 0, 255), 'truck': (0, 255, 0), 'motorcycle': (255, 0, 0)}
+    y_positions = {'car': 30, 'truck': 60, 'motorcycle': 90}
     for vehicle, color in colors.items():
         pos_y = y_positions[vehicle]
         thickness = -1 if count_by_class[vehicle] > 0 else 2
@@ -117,13 +120,9 @@ while True:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         y_offset += 25
 
-    # Display the frame
     cv2.imshow('Vehicle Detection', frame)
 
-    # Press 'q' to quit
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Clean up
-cap.release()
 cv2.destroyAllWindows()
