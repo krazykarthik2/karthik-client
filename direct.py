@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import tensorflow as tf
 import time
 import RPi.GPIO as GPIO
 
@@ -9,10 +8,13 @@ LED_PINS = [8, 10, 11]  # You can adjust these based on your wiring
 GPIO.setmode(GPIO.BOARD)  # Use physical pin numbers
 GPIO.setup(LED_PINS, GPIO.OUT)  # Set LED pins as output
 GPIO.output(LED_PINS, GPIO.LOW)  # Initially turn off all LEDs
-
+import tflite_runtime.interpreter as tflite
 # Load the TFLite model
-interpreter = tf.lite.Interpreter(model_path="lite0-det-default.tflite")
+interpreter = tflite.Interpreter(model_path="lite0-det-default.tflite")
 interpreter.allocate_tensors()
+
+# (rest of your code remains unchanged)
+
 
 # Get model details
 input_details = interpreter.get_input_details()
