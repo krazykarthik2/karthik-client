@@ -1,12 +1,22 @@
+import os
 import cv2
 import numpy as np
 import tflite_runtime.interpreter as tflite
 import time
+import RPi.GPIO as GPIO  # Import GPIO library
 
-# Load the TFLite model with threading options
-interpreter_options = tflite.Interpreter.Options()
-interpreter_options.num_threads = 4  # Adjust based on your Pi model
-interpreter = tflite.Interpreter(model_path="lite0-det-default.tflite", options=interpreter_options)
+# Set number of threads via environment variable
+os.environ["TFLITE_NUM_THREADS"] = "3"  # Adjust based on your Pi model (e.g., Raspberry Pi 4 has 4 cores)
+
+# Set up GPIO pins for LEDs
+GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+LED_PINS = [8, 10, 11]  # GPIO Pins for LEDs (Pin 8, 10, 11)
+for pin in LED_PINS:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.LOW)  # Set initial state to LOW (off)
+
+# Load the TFLite model
+interpreter = tflite.Interpreter(model_path="lite0-det-default.tflite")
 
 # Allocate tensors
 interpreter.allocate_tensors()
@@ -95,4 +105,45 @@ while True:
     # Measure inference time
     inference_time = time.time() - start_time
     cv2.putText(frame, f"Inference Time: {inference_time:.4f}s", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    # Show FPS
+    fps = 1 / inference_time if inference_time > 0 else 0
+    cv2.putText(frame, f"FPS: {fps:.2f}", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    # Display counts
+    y_offset = 90
+    for cls, cnt in count_by_class.items():
+        cv2.putText(frame, f"{cls}: {cnt}", (10, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        y_offset += 25
+
+    # Update GPIO pins based on the detection counts
+    # Control LEDs based on detected vehicles
+    if count_by_class['car'] > 0:
+        GPIO.output(8, GPIO.HIGH)  # Turn on LED for car
+    else:
+        GPIO.output(8, GPIO.LOW)  # Turn off LED for car
+
+    if count_by_class['truck'] > 0:
+        GPIO.output(10, GPIO.HIGH)  # Turn on LED for truck
+    else:
+        GPIO.output(10, GPIO.LOW)  # Turn off LED for truck
+
+    if count_by_class['motorcycle'] > 0:
+        GPIO.output(11, GPIO.HIGH)  # Turn on LED for motorcycle
+    else:
+        GPIO.output(11, GPIO.LOW)  # Turn off LED for motorcycle
+
+    # Display the frame
+    cv2.imshow('Vehicle Detection', frame)
+
+    # Press 'q' to quit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Clean up GPIO and webcam
+cap.release()
+cv2.destroyAllWindows()
+GPIO.cleanup()  # Clean up GPIO resources
