@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Load YOLOv5 ONNX model using OpenCV
-net = cv2.dnn.readNet("yolo.onnx")
+net = cv2.dnn.readNet("yolov5n.onnx")
 
 # Load COCO class labels
 with open("labels.txt") as f:
