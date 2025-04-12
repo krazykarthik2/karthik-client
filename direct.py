@@ -1,20 +1,15 @@
 import cv2
 import numpy as np
+import tensorflow as tf
 import time
-import RPi.GPIO as GPIO
 
-# Set up GPIO pins for LEDs (connected to GPIO 8, 10, 11)
-LED_PINS = [8, 10, 11]  # You can adjust these based on your wiring
-GPIO.setmode(GPIO.BOARD)  # Use physical pin numbers
-GPIO.setup(LED_PINS, GPIO.OUT)  # Set LED pins as output
-GPIO.output(LED_PINS, GPIO.LOW)  # Initially turn off all LEDs
-import tflite_runtime.interpreter as tflite
 # Load the TFLite model
-interpreter = tflite.Interpreter(model_path="lite0-det-default.tflite")
+interpreter_options = tf.lite.Interpreter.Options()
+interpreter_options.num_threads = 4  # Adjust based on your Pi model (number of cores)
+interpreter = tf.lite.Interpreter(model_path="lite0-det-default.tflite", options=interpreter_options)
+
+# Allocate tensors
 interpreter.allocate_tensors()
-
-# (rest of your code remains unchanged)
-
 
 # Get model details
 input_details = interpreter.get_input_details()
@@ -96,22 +91,6 @@ while True:
             if object_name in count_by_class:
                 count_by_class[object_name] += 1
 
-    # Map counts to LEDs
-    if count_by_class['car'] > 0:
-        GPIO.output(LED_PINS[0], GPIO.HIGH)  # Turn on LED for cars
-    else:
-        GPIO.output(LED_PINS[0], GPIO.LOW)   # Turn off LED for cars
-
-    if count_by_class['truck'] > 0:
-        GPIO.output(LED_PINS[1], GPIO.HIGH)  # Turn on LED for trucks
-    else:
-        GPIO.output(LED_PINS[1], GPIO.LOW)   # Turn off LED for trucks
-
-    if count_by_class['motorcycle'] > 0:
-        GPIO.output(LED_PINS[2], GPIO.HIGH)  # Turn on LED for motorcycles
-    else:
-        GPIO.output(LED_PINS[2], GPIO.LOW)   # Turn off LED for motorcycles
-
     # Show FPS
     fps = 1 / (time.time() - start_time) if 'start_time' in locals() else 0
     start_time = time.time()
@@ -135,4 +114,3 @@ while True:
 # Clean up
 cap.release()
 cv2.destroyAllWindows()
-GPIO.cleanup()  # Reset the GPIO pins on exit
