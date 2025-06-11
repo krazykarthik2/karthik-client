@@ -1,7 +1,7 @@
 # When you use sudo nano , it will open text editor to save after pasting text, use Ctrl + O
 
 ## use direct_windowless.py for if you want without window,
-## use main.py for if you want with window
+## use direct.py for if you want with window
 
 
 # Project Execution Documentation
